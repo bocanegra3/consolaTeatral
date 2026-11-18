@@ -1,5 +1,5 @@
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   ScrollView,
@@ -12,6 +12,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
 import { useAudioPlayer, createAudioPlayer } from "expo-audio";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { File, Directory, Paths } from "expo-file-system";
+import * as LegacyFileSystem from "expo-file-system/legacy";
 
 export default function App() {
 const [screen, setScreen] = useState<
@@ -20,6 +23,7 @@ const [screen, setScreen] = useState<
 
 const [selectedScene, setSelectedScene] = useState(1);
 const [isEditing, setIsEditing] = useState(false);
+const [settingsLoaded, setSettingsLoaded] = useState(false);
 
 const [selectedPad, setSelectedPad] = useState<number | null>(null);
 const [padName, setPadName] = useState("");
@@ -35,6 +39,48 @@ const [padColors, setPadColors] = useState<Record<string, string>>({});
 const [padAudios, setPadAudios] = useState<
   Record<string, { name: string; uri: string }>
 >({});
+const savePadSettings = async (
+  names: Record<string, string>,
+  colors: Record<string, string>
+) => {
+  try {
+    await AsyncStorage.setItem(
+      "consola_pad_settings",
+      JSON.stringify({ names, colors })
+    );
+
+    console.log("Configuración guardada correctamente");
+  } catch (error) {
+    console.log("Error al guardar configuración:", error);
+  }
+};
+
+const saveAudioFile = (
+  sourceUri: string,
+  padKey: string,
+  originalName: string
+): string => {
+  const audioDirectory = new Directory(
+    Paths.document,
+    "consola-audios"
+  );
+
+  audioDirectory.create({ idempotent: true });
+
+  const extension =
+    originalName.split(".").pop()?.toLowerCase() || "mp3";
+
+  const source = new File(sourceUri);
+
+  const destination = new File(
+    audioDirectory,
+  `${padKey}-${Date.now()}.${extension}`
+  );
+
+  source.copy(destination);
+
+  return destination.uri;
+};
 
 const openPadEditor = (padNumber: number) => {
   const key = `${selectedScene}-${padNumber}`;
@@ -56,12 +102,18 @@ const pickAudio = async () => {
       copyToCacheDirectory: true,
     });
 
-    if (!result.canceled && result.assets.length > 0) {
-      const file = result.assets[0];
-
-      setSelectedAudio(file.name);
-      setSelectedAudioUri(file.uri);
+    if (result.canceled || result.assets.length === 0) {
+      return;
     }
+
+    const file = result.assets[0];
+
+    console.log("URI seleccionada:", file.uri);
+setSelectedAudio(file.name);
+setSelectedAudioUri(file.uri);
+
+console.log("Audio seleccionado:", file.name);
+
   } catch (error) {
     console.log("Error al seleccionar audio:", error);
   }
@@ -148,6 +200,31 @@ const availableColors = [
     { id: 3, name: "Escena 3", color: "#795578" },
   ];
 
+useEffect(() => {
+  const loadSettings = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(
+        "consola_pad_settings"
+      );
+
+      if (saved) {
+        const settings = JSON.parse(saved);
+
+        setPadNames(settings.names || {});
+        setPadColors(settings.colors || {});
+      }
+
+      console.log("Configuración recuperada");
+    } catch (error) {
+      console.log("Error al recuperar configuración:", error);
+    } finally {
+      setSettingsLoaded(true);
+    }
+  };
+
+  loadSettings();
+}, []);
+  
  return (
   <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <StatusBar style="light" />
@@ -319,15 +396,22 @@ const availableColors = [
 
     const key = `${selectedScene}-${selectedPad}`;
 
-    setPadNames((previous) => ({
-      ...previous,
-      [key]: padName.trim(),
-    }));
+const updatedNames = {
+  ...padNames,
+  [key]: padName.trim(),
+};
 
-    setPadColors((previous) => ({
-      ...previous,
-      [key]: padColor,
-    }));
+const updatedColors = {
+  ...padColors,
+  [key]: padColor,
+};
+
+setPadNames(updatedNames);
+setPadColors(updatedColors);
+
+if (settingsLoaded) {
+  savePadSettings(updatedNames, updatedColors);
+}
     if (selectedAudio && selectedAudioUri) {
   setPadAudios((previous) => ({
     ...previous,
