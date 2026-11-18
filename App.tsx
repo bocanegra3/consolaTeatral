@@ -41,12 +41,17 @@ const [padAudios, setPadAudios] = useState<
 >({});
 const savePadSettings = async (
   names: Record<string, string>,
-  colors: Record<string, string>
+  colors: Record<string, string>,
+  audios: Record<string, { name: string; uri: string }>
 ) => {
   try {
     await AsyncStorage.setItem(
       "consola_pad_settings",
-      JSON.stringify({ names, colors })
+      JSON.stringify({
+        names,
+        colors,
+        audios,
+      })
     );
 
     console.log("Configuración guardada correctamente");
@@ -212,8 +217,10 @@ useEffect(() => {
 
         setPadNames(settings.names || {});
         setPadColors(settings.colors || {});
+        setPadAudios(settings.audios || {});
+        console.log("Audios recuperados:", settings.audios);
       }
-
+      
       console.log("Configuración recuperada");
     } catch (error) {
       console.log("Error al recuperar configuración:", error);
@@ -406,23 +413,29 @@ const updatedColors = {
   [key]: padColor,
 };
 
+
 setPadNames(updatedNames);
 setPadColors(updatedColors);
 
-if (settingsLoaded) {
-  savePadSettings(updatedNames, updatedColors);
-}
-    if (selectedAudio && selectedAudioUri) {
-  setPadAudios((previous) => ({
-    ...previous,
-    [key]: {
-      name: selectedAudio,
-      uri: selectedAudioUri,
-    },
-  }));
+const updatedAudios = { ...padAudios };
+
+if (selectedAudio && selectedAudioUri) {
+  updatedAudios[key] = {
+    name: selectedAudio,
+    uri: selectedAudioUri,
+  };
 }
 
-    setScreen("pads");
+setPadAudios(updatedAudios);
+
+if (settingsLoaded) {
+  savePadSettings(
+    updatedNames,
+    updatedColors,
+    updatedAudios
+  );
+}
+
   }}
 >
   <Text style={styles.saveButtonText}>Guardar</Text>
